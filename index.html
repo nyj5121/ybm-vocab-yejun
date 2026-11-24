@@ -51,6 +51,7 @@ a.l{font-size:15px;padding:6px 2px;font-weight:600}.sub{font-size:14px}
 .leg{display:flex;gap:14px;font-size:14px;flex-wrap:wrap}.leg b{font-size:18px}
 .cta{font-size:19px;padding:18px}
 .tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}
+.modes{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0 8px}.mode{border:2px solid var(--bd);background:var(--card);color:var(--tx);border-radius:14px;padding:12px;text-align:left;cursor:pointer}.mode b{display:block;font-size:16px}.mode span{display:block;color:var(--sub);font-size:12px;margin-top:3px;line-height:1.35}.mode.on{border-color:var(--pri);background:rgba(59,108,246,.1)}.mode.on b{color:var(--pri)}.freeb{margin:0 0 8px;color:var(--warn)}body.free .top span::before{content:'기초 모드 · ';color:var(--warn);font-weight:700}
 .tile{border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:14px;padding:14px;text-align:left;cursor:pointer;min-height:84px}
 .tile b{display:block;font-size:17px}.tile span{display:block;color:var(--sub);font-size:13px;margin-top:4px;line-height:1.35}
 .lrow{display:flex;justify-content:space-between;align-items:center;width:100%;border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:14px;padding:15px;margin-top:8px;font-size:16px;cursor:pointer;text-align:left}
@@ -73,7 +74,7 @@ try{ST=JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){ST={}}
 ST.w=ST.w||{};ST.iss=ST.iss||{};ST.rounds=ST.rounds||[];ST.notes=ST.notes||{};ST.ans=ST.ans||[];
 function save(){ST.ts=Date.now();try{localStorage.setItem(KEY,JSON.stringify(ST))}catch(e){}syncSoon()}
 const H=36e5,IV=[0,10*60e3,6*H,24*H,48*H,96*H];
-let FREE=false;
+let MODE=(function(){try{return localStorage.getItem('ybm_mode')==='real'?'real':'free'}catch(e){return 'free'}})();let FREE=MODE==='free';
 function mark(w,ok,kind){if(FREE)return;const s=ST.w[w]||(ST.w[w]={k:0,x:0,b:0,due:0,lapse:0});if(s.b===undefined){s.b=s.last===1?1:0;s.due=0;s.lapse=s.lapse||0}
  const now=Date.now();s.t=now;
  if(ok){s.k++;s.last=1;if(s.b===0||now>=s.due){let nb=s.b+1;if(kind==='self')nb=Math.min(nb,2);s.b=Math.min(5,nb)}}
@@ -104,7 +105,7 @@ function restRef(c){const u=`https://firestore.googleapis.com/v1/projects/${enco
  return {async get(){const r=await fetch(u);if(r.status===404)return {exists:false};if(!r.ok)throw new Error('http '+r.status);const j=await r.json(),f=j.fields||{};return {exists:true,data:()=>({s:f.s&&f.s.stringValue,ts:f.ts&&+f.ts.integerValue})}},
   async set(d){const r=await fetch(u,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({fields:{s:{stringValue:d.s},ts:{integerValue:String(d.ts)}}})});if(!r.ok)throw new Error('http '+r.status)}}}
 async function syncInit(){try{
- if(!SYL){SYL=true;document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')pull()})}
+ if(!SYL){SYL=true;document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')pull()});window.addEventListener('online',()=>{pull()})}
  if(window.claude&&window.claude.use){const [db,user]=await Promise.all([window.claude.use('db'),window.claude.use('user')]);if(!db||!user)return;
   const id=await user.id();if(!id)return;SY.ref=db.doc('data/users/'+id+'/progress')}
  else{const c=cfgGet();if(!(c&&c.pid&&c.key&&c.code&&c.code.length>=20)){SY.ref=null;SY.st='off';syShow();return}SY.ref=restRef(c)}
@@ -128,19 +129,21 @@ function head(t){return `<div class="top"><a class="l" id="bk">← 처음으로<
 function finish(t){A.innerHTML=`${head('')}<div class="card" style="text-align:center"><div class="q">끝났어요 🎉</div><div>${t||''}</div></div><div class="row"><button class="btn" id="hm">처음으로</button></div>`;$('hm').onclick=home;back()}
 function chips(arr,cur,attr){return arr.map(([k,l])=>`<button class="chip ${cur===k?'on':''}" data-${attr}="${k}">${l}</button>`).join('')}
 let scopeOpen=false,QT=0;
-function home(){QT++;FREE=false;
+function home(){QT++;FREE=MODE==='free';document.body.classList.toggle('free',FREE);
  const kn=V.filter(v=>isKnown(v.w)).length,lrn=V.filter(v=>seen(v.w)&&!isKnown(v.w)).length,due=V.filter(v=>isDue(v.w)).length,wk=V.filter(v=>isWeak(v.w)).length,total=V.length,un=total-kn-lrn,p=pool().length;
  const N=c=>Object.values(ST.notes).filter(x=>x.c===c).length;const iss=Object.keys(ST.iss).length;
  const dl=days.size===10?'D31–40':(days.size?[...days].sort().map(d=>'D'+d).join(' '):'Day 없음');
  const ll=letters.size?[...letters].sort().join(' '):'A–Z';
  const tl={all:'난도 전체','1':'1단계만','2':'2단계만','12':'1+2단계'}[tf],sl={all:'전부',new:'안정 전',due:'복습할 시간',weak:'방금 틀린 것'}[scope],ol=ord==='abc'?'A→Z 순':'섞어서';
- const md=[['fcfree','기초 훑어보기','처음 볼 때 · 기록 안 남아요'],['fc','암기카드','뜻 보고 알아요/몰라요'],['quiz','4지선다','단어 보고 뜻 고르기'],['spell','스펠링','뜻 보고 단어 쓰기'],['match','매칭','단어와 뜻 짝 맞추기'],['pair','짝 구별','헷갈리는 단어 가려내기'],['common','공통 단어','다의어 세 뜻 → 단어'],];
+ const md=[['fc','암기카드','뜻 보고 알아요/몰라요'],['quiz','4지선다','단어 보고 뜻 고르기'],['spell','스펠링','뜻 보고 단어 쓰기'],['match','매칭','단어와 뜻 짝 맞추기'],['pair','짝 구별','헷갈리는 단어 가려내기'],['common','공통 단어','다의어 세 뜻 → 단어'],];
  A.innerHTML=`<h1 style="font-size:22px">기말 영단어 <span class="sub">Day 31~40</span></h1>
+ <div class="modes"><button class="mode ${FREE?'on':''}" data-md="free"><b>기초 모드</b><span>처음 외울 때 · 기록 안 남아요</span></button><button class="mode ${FREE?'':'on'}" data-md="real"><b>본 모드</b><span>기록 · 복습 일정 · 오답노트 반영</span></button></div>
+ ${FREE?'<div class="sub freeb">기초 모드예요. 어떤 기능을 해도 안정/학습 중 기록, 시험형 출제 기록, 오답노트에 남지 않아요. 외운 뒤 위에서 본 모드로 바꿔서 다시 풀어 보세요.</div>':''}
  <div class="hero"><div class="leg"><span><b style="color:var(--ok)">${kn}</b> 안정</span><span><b style="color:var(--warn)">${lrn}</b> 학습 중</span><span><b>${un}</b> 안 해봄</span><span><b style="color:var(--no)">${wk}</b> 방금 틀림</span></div>
  <div class="seg"><i style="width:${kn/total*100}%;background:var(--ok)"></i><i style="width:${lrn/total*100}%;background:var(--warn)"></i></div>
  <div class="sub">전체 ${total}개 · 시험형 출제 ${iss}개 · 오답노트 A${N('A')} B${N('B')} C${N('C')}</div><div class="sub" id="sy" style="margin-top:4px">${syLabel()}</div></div>
- <button class="btn cta ${due?'':'ghost'}" id="rv" style="margin-top:10px">${due?`오늘 복습 시작 · ${due}개`:'지금 복습할 단어 없음'}</button>
- ${due?'':`<div class="sub" style="margin-top:6px">${dueMsg()||'먼저 아래에서 학습을 시작해 보세요.'}</div>`}
+ ${FREE?'':`<button class="btn cta ${due?'':'ghost'}" id="rv" style="margin-top:10px">${due?`오늘 복습 시작 · ${due}개`:'지금 복습할 단어 없음'}</button>
+ ${due?'':`<div class="sub" style="margin-top:6px">${dueMsg()||'먼저 아래에서 학습을 시작해 보세요.'}</div>`}`}
  <h2>학습하기</h2>
  <details class="sc" id="sc" ${scopeOpen?'open':''}><summary><div class="sum1"><b>${p}개</b> · ${dl} · ${ll}<br><span class="sub">${tl} · ${sl} · ${ol}</span></div><div class="sub tg" style="margin-top:6px;color:var(--pri);font-weight:600">${scopeOpen?'▲ 범위 닫기':'▼ 범위 바꾸기 (Day · 알파벳 · 순서)'}</div></summary>
   <div style="margin-top:10px"><b>Day</b><div class="chips">${[31,32,33,34,35,36,37,38,39,40].map(d=>`<button class="chip ${days.has(d)?'on':''}" data-d="${d}">${d}</button>`).join('')}<button class="chip ${days.size===10?'on':''}" id="all">전체</button><button class="chip ${days.size?'':'on'}" id="none">해제</button></div>
@@ -162,17 +165,18 @@ function home(){QT++;FREE=false;
  A.querySelectorAll('[data-lt2]').forEach(b=>b.onclick=()=>{const l=b.dataset.lt2;letters.has(l)?letters.delete(l):letters.add(l);scopeOpen=true;home()});A.querySelectorAll('[data-o]').forEach(b=>b.onclick=()=>{ord=b.dataset.o;scopeOpen=true;home()});
  $('lall').onclick=()=>{letters.clear();scopeOpen=true;home()};$('all').onclick=()=>{[31,32,33,34,35,36,37,38,39,40].forEach(d=>days.add(d));scopeOpen=true;home()};$('none').onclick=()=>{days.clear();scopeOpen=true;home()};
  A.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>start(b.dataset.m));
- $('rv').onclick=()=>{const q=shuffle(V.filter(v=>isDue(v.w)));if(!q.length)return;Q=q;qi=0;done=0;quiz()};
+ A.querySelectorAll('[data-md]').forEach(b=>b.onclick=()=>{MODE=b.dataset.md;try{localStorage.setItem('ybm_mode',MODE)}catch(e){}home()});
+ if($('rv'))$('rv').onclick=()=>{const q=shuffle(V.filter(v=>isDue(v.w)));if(!q.length)return;Q=q;qi=0;done=0;quiz()};
  $('wc').onclick=wcMenu;$('redo').onclick=()=>wcStart('redo');$('ab').onclick=()=>abc();$('lk').onclick=lookup;$('pt').onclick=pairs;$('nt').onclick=notes;$('rc').onclick=record;
 }
 function start(m){Q=ord==='abc'?pool().sort((a,b)=>a.w.localeCompare(b.w)):shuffle(pool());qi=0;done=0;if(!Q.length){home();A.insertAdjacentHTML('afterbegin','<div class="card bad">선택한 범위에 단어가 없어요.</div>');return}
- if(m==='fcfree'){FREE=true;fc();return}({fc,quiz,spell,match,pair,common})[m]()}
+ ({fc,quiz,spell,match,pair,common})[m]()}
 // ---- 암기카드 ----
 function fc(){
  if(qi>=Q.length)return finish('모든 카드를 마쳤어요.');
  const v=Q[qi];let open=false;
  const draw=()=>{const ps=[...P[v.i]].slice(0,6);
- A.innerHTML=`${head(`${FREE?'기초 훑어보기 · 기록 안 함 · ':''}${done}/${Q.length} · 남은 ${Q.length-qi}`)}<div class="card fc" id="c"><div class="d">D${v.day} · #${v.n}${v.tier?' · '+v.tier+'단계':''}</div><div class="w">${v.w}</div>${open?`<div class="m" style="margin-top:14px">${mfull(v,-1)}</div>`:`<div class="hint">눌러서 뜻 보기 · 밀어서 넘기기(→ 알아요 / ← 몰라요)</div>`}</div>
+ A.innerHTML=`${head(`${done}/${Q.length} · 남은 ${Q.length-qi}`)}<div class="card fc" id="c"><div class="d">D${v.day} · #${v.n}${v.tier?' · '+v.tier+'단계':''}</div><div class="w">${v.w}</div>${open?`<div class="m" style="margin-top:14px">${mfull(v,-1)}</div>`:`<div class="hint">눌러서 뜻 보기 · 밀어서 넘기기(→ 알아요 / ← 몰라요)</div>`}</div>
  ${open&&ps.length?`<div class="card list"><div class="sub">헷갈리는 짝</div>${ps.map(i=>`<div><b>${V[i].w}</b> <span class="sub">D${V[i].day}</span> ${esc(V[i].raw)}</div>`).join('')}</div>`:''}
  <div class="row stick"><button class="btn no" id="no">← 몰라요</button><button class="btn ok" id="ok">알아요 →</button></div>`;
  $('c').onclick=()=>{open=!open;draw()};back();let sx=null;$('c').ontouchstart=e=>{sx=e.touches[0].clientX};$('c').ontouchend=e=>{if(sx===null)return;const dx=e.changedTouches[0].clientX-sx;sx=null;if(Math.abs(dx)>70){e.preventDefault();dx>0?$('ok').click():$('no').click()}};
@@ -308,21 +312,21 @@ function wcQ(){
   const xs=q.jd.filter(j=>j===1).length;if(xs!==q.pick&&!q.warned){q.warned=1;$('ms').innerHTML=`<span class="warn">×로 표시한 줄이 ${xs}개인데 고른 답은 ${NUM[q.pick-1]}예요. 그대로 제출하려면 한 번 더 누르세요.</span>`;return}
   if(RD.cur+1<RD.qs.length){RD.cur++;wcQ()}else wcResult()}}
 const RK={A:3,B:2,C:1};
-function addNote(w,c,srcw){const n=ST.notes[w];if(!n){ST.notes[w]={c,s:srcw?[srcw]:[],ok:0}}else{if(RK[c]>RK[n.c])n.c=c;if(srcw&&!n.s.includes(srcw))n.s.push(srcw)}}
+function addNote(w,c,srcw){if(FREE)return;const n=ST.notes[w];if(!n){ST.notes[w]={c,s:srcw?[srcw]:[],ok:0}}else{if(RK[c]>RK[n.c])n.c=c;if(srcw&&!n.s.includes(srcw))n.s.push(srcw)}}
 function wcResult(){
  const rnum=ST.rounds.length+1;const rec={n:rnum,lap:RD.lap,q:[]};let h='';
- RD.qs.forEach((q,qn)=>{const ok=q.pick===q.k;ST.ans.push(q.k);
+ RD.qs.forEach((q,qn)=>{const ok=q.pick===q.k;if(!FREE)ST.ans.push(q.k);
   const rows=q.items.map((it,p)=>{const v=V[it.id],t=it.wrong?1:0,j=q.jd[p];
-   const u=ST.iss[v.w]||(ST.iss[v.w]={m:[],wr:[]});if(it.wrong)u.wr.push([it.o,it.j]);else u.m.push(it.j);
+   if(!FREE){const u=ST.iss[v.w]||(ST.iss[v.w]={m:[],wr:[]});if(it.wrong)u.wr.push([it.o,it.j]);else u.m.push(it.j)}
    let g,note='';
    if(j===2){g='△ 불확실(B)';addNote(v.w,'B')}
    else if(j!==t){g='× 틀림(A)';addNote(v.w,'A',it.wrong?V[it.o].w:null);mark(v.w,0)}
-   else{g='○ 맞음';mark(v.w,1);if(ST.notes[v.w])ST.notes[v.w].ok++}
+   else{g='○ 맞음';mark(v.w,1);if(!FREE&&ST.notes[v.w])ST.notes[v.w].ok++}
    return {html:`<tr><td>${qn*10+p+1}</td><td>${v.w} : ${esc(it.wrong?V[it.o].items[it.j]:v.items[it.j])}</td><td>${t?'<span class="bad">틀림</span>':'<span class="good">옳음</span>'}</td><td>${mfull(v,it.wrong?-1:it.j,false)}</td><td>${it.wrong?`<b>${V[it.o].w}</b>${mfull(V[it.o],it.j,true)}`:'—'}</td><td>${['○','×','?'][j]}</td><td>${g}</td></tr>`,r:[v.w,t,it.j,it.wrong?V[it.o].w:'']}});
   rec.q.push({k:q.k,mine:q.pick,items:rows.map(r=>r.r)});
   h+=`<div class="card"><b>문제 ${qn+1}</b> — 정답 ${NUM[q.k-1]} · 내 답 ${NUM[q.pick-1]} <span class="${ok?'good':'bad'}">${ok?'정답':'오답'}</span><div class="tw"><table><tr><th>번호</th><th>단어:표기된 뜻</th><th>연결 정오</th><th>실제 뜻(전체, 품사별)</th><th>헷갈리게 낀 단어와 뜻(쓴 뜻 볼드★)</th><th>내 판단</th><th>채점</th></tr>${rows.map(r=>r.html).join('')}</table></div></div>`});
- ST.rounds.push(rec);save();RD=null;
- A.innerHTML=`<div class="top"><a class="l" id="bk">← 처음으로</a><span>${rnum}회차 채점</span></div>${h}<div class="msg">× 틀림(A)와 △ 불확실(B)은 오답노트에 담겼어요. 판단 실수였다면 오답노트에서 C로 바꿔 주세요.</div><div class="row"><button class="btn" id="nt2">오답노트 보기</button><button class="btn ghost" id="nx2">한 회차 더</button></div>`;
+ if(!FREE){ST.rounds.push(rec);save()}RD=null;
+ A.innerHTML=`<div class="top"><a class="l" id="bk">← 처음으로</a><span>${FREE?'연습':rnum+'회차'} 채점</span></div>${h}<div class="msg">${FREE?'기초 모드라 이 결과는 기록과 오답노트에 남지 않았어요.':'× 틀림(A)와 △ 불확실(B)은 오답노트에 담겼어요. 판단 실수였다면 오답노트에서 C로 바꿔 주세요.'}</div><div class="row"><button class="btn" id="nt2">오답노트 보기</button><button class="btn ghost" id="nx2">한 회차 더</button></div>`;
  back();$('nt2').onclick=notes;$('nx2').onclick=wcMenu}
 // ---- 오답노트 ----
 function notes(tab){
@@ -332,8 +336,8 @@ function notes(tab){
  <div class="sub" style="margin-top:8px">A 확실히 틀림 · B 맞았지만 확신 없음 · C 판단 실수. 조회로 본 단어는 여기 안 들어와요.</div>
  <div class="card list">${list(tab).length?list(tab).map(v=>{const n=ST.notes[v.w];return `<div><b>${v.w}</b> <span class="sub">#${v.n} D${v.day} · 다시 맞힘 ${n.ok}번${n.s.length?' · 헷갈린 단어: '+n.s.join(', '):''}</span>${mfull(v,-1)}<div class="row" style="margin-top:6px">${['A','B','C'].filter(c=>c!==tab).map(c=>`<button class="btn ghost sm" data-mv="${v.w}|${c}">${c}로</button>`).join('')}<button class="btn ghost sm" data-rm="${v.w}">해결(삭제)</button></div></div>`}).join(''):'비어 있어요.'}</div>`;
  back();A.querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>notes(b.dataset.c));
- A.querySelectorAll('[data-mv]').forEach(b=>b.onclick=()=>{const [w,c]=b.dataset.mv.split('|');ST.notes[w].c=c;save();notes(tab)});
- A.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{delete ST.notes[b.dataset.rm];save();notes(tab)})}
+ A.querySelectorAll('[data-mv]').forEach(b=>b.onclick=()=>{if(FREE){A.insertAdjacentHTML('afterbegin','<div class="card warn">기초 모드에서는 오답노트를 바꿀 수 없어요. 본 모드에서 바꿔 주세요.</div>');return}const [w,c]=b.dataset.mv.split('|');ST.notes[w].c=c;save();notes(tab)});
+ A.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{if(FREE){A.insertAdjacentHTML('afterbegin','<div class="card warn">기초 모드에서는 오답노트를 바꿀 수 없어요. 본 모드에서 바꿔 주세요.</div>');return}delete ST.notes[b.dataset.rm];save();notes(tab)})}
 // ---- 알파벳 단어장 ----
 let AB={l:'all',hide:'none',day:'all',rev:new Set()};
 function abc(){
